@@ -111,7 +111,7 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
 
     #* Create dimenssions
     TSTEP = ds_new_cmaq.createDimension("TSTEP", None)
-    DATE_TIME = ds_new_cmaq.createDimension("DATE-TIME", len(dic_cmaq['TFLAG'][0][0][:]))
+    DATE_TIME = ds_new_cmaq.createDimension("DATE-TIME", 2)
     LAY = ds_new_cmaq.createDimension("LAY", lays)
     VAR = ds_new_cmaq.createDimension("VAR", num_vars)
     ROW = ds_new_cmaq.createDimension("ROW", rows)
@@ -130,8 +130,6 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
 
     #* Fill variables
     ds_new_cmaq.variables[spc_name][:, :, :] = forced_arr
-    print(forced_arr.shape)
-    print(day, hr)
     ds_new_cmaq.variables['TFLAG'][:, :, :] = create_tflag_arr(day, hr)
 
     #* Creatae attributes
@@ -176,7 +174,7 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
     #* Close new netcdf file
     ds_new_cmaq.close()
 
-    print(f"{day} Forcing file DONE")
+    (f"{day} Forcing file DONE")
 
 # %%
 if __name__ == "__main__":
