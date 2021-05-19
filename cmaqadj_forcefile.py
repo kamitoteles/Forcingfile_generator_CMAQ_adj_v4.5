@@ -174,7 +174,7 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, 
     #* Close new netcdf file
     ds_new_cmaq.close()
 
-    (f"{day} Forcing file DONE")
+    print(f"{day} Forcing file DONE")
 
 # %%
 if __name__ == "__main__":
