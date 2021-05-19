@@ -87,7 +87,7 @@ def create_tflag_arr(day, hr):
 
     return tflag_arr
 
-def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
+def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, vglev):
     """Create Final NETCDF file.
 
     Keyword arguments:
@@ -119,13 +119,13 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
 
     #* Create variables
     tflag = ds_new_cmaq.createVariable("TFLAG","i4",("TSTEP","VAR", "DATE-TIME"))
-    tflag.units = '<YYYYDDD,HHMMSS>'
     tflag.long_name = 'TFLAG'
+    tflag.units = '<YYYYDDD,HHMMSS>'
     tflag.var_desc = 'Timestep-valid flags:  (1) YYYYDDD or (2) HHMMSS'
 
     var_temp = ds_new_cmaq.createVariable(spc_name,"f4",("TSTEP", "LAY", "ROW", "COL"))
-    var_temp.units = units
     var_temp.long_name = spc_name
+    var_temp.units = units
     var_temp.var_desc = f'Forced species {spc_name}'
 
     #* Fill variables
@@ -160,10 +160,10 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr):
                 'XCELL': np.float64(ds_latlon.XCELL),
                 'YCELL': np.float64(ds_latlon.YCELL),
                 'VGTYP': np.int32(ds_latlon.VGTYP),
-                'VGTOP': np.float32(0.0),
-                'VGLVLS': np.array([np.float32(0.), np.float32(0.)]),
+                'VGTOP': vgtop,
+                'VGLVLS': vglev,
                 'GDNAM': ds_latlon.GDNAM,
-                'UPNAM': "M3WNDW",
+                'UPNAM': "RD_FORCE_FILE",
                 'VAR-LIST': varlist,
                 'FILEDESC': "Forcing file of specified geolocations/ Camilo Moreno",
                 'HISTORY': 'La historia es historia',}
@@ -191,10 +191,11 @@ if __name__ == "__main__":
     #                               'name_of_location_1': [lower_left_lat_1, lower_left_lon_1, upper_left_lat_1, upper_left_lon_1]
     #                               'name_of_location_2': [lower_left_lat_2, lower_left_lon_2, upper_left_lat_2, upper_left_lon_2]
     #                                 }
-    save_dir = '/Volumes/Avispa'
-    latlon_file = '/Volumes/Avispa/Emissions/CMAQ_emis/latlon.emis'
-    spc_name = 'ASOJK'
-    units = 'g/s'
+    save_dir = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/data/Feb_2018/forcing_files'
+    latlon_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Feb_2018/latlon.conc'
+    conc_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Test_Feb2018/CONC.20180201'
+    spc_name = 'ASOJI'
+    units = 'micrograms/m**3 '
 
     day_0 = 2018032
     day_end = 2018033
@@ -204,10 +205,14 @@ if __name__ == "__main__":
                 }
     
     ds_latlon = Dataset(latlon_file, mode = 'r',  open = True)
+    ds_conc = Dataset(conc_file, mode = 'r',  open = True)
+    vgtop = ds_conc.VGTOP
+    vglev = ds_conc.VGLVLS
+    ds_conc.close()
 
     for day in range(day_0, day_end + 1):
         forced_arr = create_forced_var(ds_latlon, dic_coords)
-        create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr)
+        create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, vglev)
 
     ds_latlon.close()
 # %%
