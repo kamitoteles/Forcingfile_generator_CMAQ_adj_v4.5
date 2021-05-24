@@ -8,6 +8,7 @@
 #%%
 import numpy as np
 from netCDF4 import Dataset
+from datetime import datetime, date, timedelta
 
 def create_forced_uniarray(coords, dx, dy, lons, lats):
     """Create array where cells that wanted to be forced are equal to 1
@@ -87,6 +88,24 @@ def create_tflag_arr(day, hr):
 
     return tflag_arr
 
+def monthly_date(day):
+    """convert date from YYYYDDD to YYYYMMDD.
+
+    Keyword arguments:
+    day -- int of the day in format YYYYDDD
+    """
+    day_str = str(day)
+    year = int(day_str[0:4])
+    day_y = int(day_str[4:])
+
+    date = datetime(year, 1, 1) + timedelta(day_y - 1)
+    daym = date.timetuple().tm_mday
+    str_daym = '0'*(2 - len(str(daym))) + str(daym)
+    month = date.timetuple().tm_mon
+    str_month = '0'*(2 - len(str(month))) + str(month)
+
+    return str(year) + str_month + str_daym
+
 def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, vglev):
     """Create Final NETCDF file.
 
@@ -106,7 +125,8 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, 
     datetimes = len(ds_latlon.dimensions['DATE-TIME'])
 
     #* Create new netCDF
-    new_cmaq_file = f'{save_dir}/ADJ_FORCE.{day}'
+    day_monthly = monthly_date(day)
+    new_cmaq_file = f'{save_dir}/ADJ_FORCE.{day_monthly}'
     ds_new_cmaq = Dataset(new_cmaq_file, open = True, mode = 'w', format=  "NETCDF3_64BIT")
 
     #* Create dimenssions
@@ -192,13 +212,13 @@ if __name__ == "__main__":
     #                               'name_of_location_2': [lower_left_lat_2, lower_left_lon_2, upper_left_lat_2, upper_left_lon_2]
     #                                 }
     save_dir = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/data/Feb_2018/forcing_files'
-    latlon_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Feb_2018/latlon.conc'
+    latlon_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Test_Feb2018/latlon.conc'
     conc_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Test_Feb2018/CONC.20180201'
-    spc_name = 'ASOJI'
+    spc_name = 'ASO4I'
     units = 'micrograms/m**3 '
 
     day_0 = 2018032
-    day_end = 2018033
+    day_end = 2018036
 
     dic_coords = {
                   'Bogota' : [4.461864, -74.223421 , 4.833805, -74.007853]
@@ -216,3 +236,4 @@ if __name__ == "__main__":
 
     ds_latlon.close()
 # %%
+
