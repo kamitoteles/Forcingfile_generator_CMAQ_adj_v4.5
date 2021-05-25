@@ -7,8 +7,10 @@
 #+---------------------------------------------------------------------
 #%%
 import numpy as np
+import glob 
 from netCDF4 import Dataset
 from datetime import datetime, date, timedelta
+from os import listdir, scandir, getcwd
 
 def create_forced_uniarray(coords, dx, dy, lons, lats):
     """Create array where cells that wanted to be forced are equal to 1
@@ -69,25 +71,6 @@ def create_forced_var(ds_latlon, dic_coords):
 
     return forced_arr
 
-def create_tflag_arr(day, hr): 
-    """Create the TFLAG array value for one day to fill the netCDF 
-    file variable.
-
-    Keyword arguments:
-    day -- int of the day in format YYYYDDD
-    hr -- initial hour of the day. May be 0
-    """
-    for i in range(0,25):
-        if hr == 0 and i == 0:
-            tflag_arr = np.array([np.tile([day, hr], (1, 1))])
-        else:
-            tflag_temp = np.array([np.tile([day, hr], (1, 1))])
-            tflag_arr = np.concatenate((tflag_arr, tflag_temp), axis = 0)
-        day = day + int((hr / 230000))
-        hr = (hr + 10000) % 240000
-
-    return tflag_arr
-
 def monthly_date(day):
     """convert date from YYYYDDD to YYYYMMDD.
 
@@ -106,23 +89,24 @@ def monthly_date(day):
 
     return str(year) + str_month + str_daym
 
-def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, vglev):
+def create_ncfile(save_dir, ds_latlon, spc_name, forced_arr, ds_conc):
     """Create Final NETCDF file.
 
     Keyword arguments:
     save_dir -- string of the location for saving the netCDF files
-    day -- int of the day in format YYYYDDD
     ds_latlon -- Dataset of the latlon netCDF file of the grid
     spc_name -- string of the forced species name
-    units -- string of the units for the force species
     forced_arr -- array containing the forced values by location for the species
+    ds_conc -- conc file dataset
     """
     hr = 0
     num_vars = 1
     lays = 1
+    ltime = 25
     cols = len(ds_latlon.dimensions['COL'])
     rows = len(ds_latlon.dimensions['ROW'])
     datetimes = len(ds_latlon.dimensions['DATE-TIME'])
+    day = ds_conc.SDATE
 
     #* Create new netCDF
     day_monthly = monthly_date(day)
@@ -131,79 +115,85 @@ def create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, 
 
     #* Create dimenssions
     TSTEP = ds_new_cmaq.createDimension("TSTEP", None)
-    DATE_TIME = ds_new_cmaq.createDimension("DATE-TIME", 2)
+    DATE_TIME = ds_new_cmaq.createDimension("DATE-TIME", datetimes)
     LAY = ds_new_cmaq.createDimension("LAY", lays)
     VAR = ds_new_cmaq.createDimension("VAR", num_vars)
     ROW = ds_new_cmaq.createDimension("ROW", rows)
     COL = ds_new_cmaq.createDimension("COL", cols)
 
-    #* Create variables
-    tflag = ds_new_cmaq.createVariable("TFLAG","i4",("TSTEP","VAR", "DATE-TIME"))
-    tflag.long_name = 'TFLAG'
-    tflag.units = '<YYYYDDD,HHMMSS>'
-    tflag.var_desc = 'Timestep-valid flags:  (1) YYYYDDD or (2) HHMMSS'
-
-    var_temp = ds_new_cmaq.createVariable(spc_name,"f4",("TSTEP", "LAY", "ROW", "COL"))
-    var_temp.long_name = spc_name
-    var_temp.units = units
-    var_temp.var_desc = f'Forced species {spc_name}'
-
-    #* Fill variables
-    ds_new_cmaq.variables[spc_name][:, :, :] = forced_arr
-    ds_new_cmaq.variables['TFLAG'][:, :, :] = create_tflag_arr(day, hr)
+    ds_new_cmaq.sync()
 
     #* Creatae attributes
+    attrs=["IOAPI_VERSION", "EXEC_ID", "FTYPE", "CDATE", "CTIME", "WDATE", "WTIME", 
+           "SDATE", "STIME", "TSTEP", "NTHIK", "NCOLS", "NROWS", "GDTYP", "P_ALP", 
+           "P_BET", "P_GAM", "XCENT", "YCENT", "XORIG", "YORIG", "XCELL", "YCELL", 
+           "VGTYP", "VGTOP", "VGLVLS", "GDNAM", "HISTORY"]
+    
+    for attr in attrs:
+        if hasattr(ds_conc, attr): 
+            attrVal = getattr(ds_conc, attr)
+            setattr(ds_new_cmaq, attr, attrVal)
+
     varlist = spc_name + ' '*(16 - len(spc_name))
-    cmaq_attrs = {'IOAPI_VERSION': '$Id: @(#) ioapi library version 3.1 $',
-                'EXEC_ID': '????????????????',
-                'FTYPE': np.int32(1),
-                'CDATE': np.int32(2021100),
-                'CTIME': np.int32(185404),
-                'WDATE': np.int32(2021100),
-                'WTIME': np.int32(185404),
-                'SDATE': np.int32(day),
-                'STIME': np.int32(hr),
-                'TSTEP': np.int32(10000),
-                'NTHIK': np.int32(1),
-                'NCOLS': np.int32(cols),
-                'NROWS': np.int32(rows),
-                'NLAYS': np.int32(lays),
-                'NVARS': np.int32(num_vars),
-                'GDTYP': np.int32(ds_latlon.GDTYP), # 2 is Lambert Conformal Conic
-                'P_ALP': np.float64(ds_latlon.P_ALP),
-                'P_BET': np.float64(ds_latlon.P_BET),
-                'P_GAM': np.float64(ds_latlon.P_GAM),
-                'XCENT': np.float64(ds_latlon.XCENT),
-                'YCENT': np.float64(ds_latlon.YCENT),
-                'XORIG': np.float64(ds_latlon.XORIG),
-                'YORIG': np.float64(ds_latlon.YORIG),
-                'XCELL': np.float64(ds_latlon.XCELL),
-                'YCELL': np.float64(ds_latlon.YCELL),
-                'VGTYP': np.int32(ds_latlon.VGTYP),
-                'VGTOP': vgtop,
-                'VGLVLS': vglev,
-                'GDNAM': ds_latlon.GDNAM,
-                'UPNAM': "RD_FORCE_FILE",
-                'VAR-LIST': varlist,
-                'FILEDESC': "Forcing file of specified geolocations/ Camilo Moreno",
-                'HISTORY': 'La historia es historia',}
+    cmaq_attrs = {'NLAYS': np.int32(lays),
+                  'NVARS': np.int32(num_vars),
+                  'UPNAM': "RD_FORCE_FILE",
+                  'VAR-LIST': varlist,
+                  'FILEDESC': "Adjoint forcing file. Forcing file of specified geolocations"
+                  }
 
     for attr in cmaq_attrs:
         ds_new_cmaq.setncattr(attr, cmaq_attrs[attr])
 
+    #* Create variables
+    tflag = ds_new_cmaq.createVariable('TFLAG', 'i4', ('TSTEP', 'VAR', 'DATE-TIME'))
+    fill_attrs(ds_conc, tflag)
+
+    var_temp = ds_new_cmaq.createVariable(spc_name,"f4",("TSTEP", "LAY", "ROW", "COL"))
+    fill_attrs(ds_conc, var_temp)
+
+    #* Fill variables
+    ds_new_cmaq.variables[spc_name][:, :, :] = forced_arr
+    dattim = np.squeeze(ds_conc.variables['TFLAG'][:][:])
+    dattim = dattim[0:ltime,1,:]
+    tflag[:] = np.zeros([ltime,lays,datetimes])
+    tflag[:] = np.reshape(dattim,[ltime,lays,datetimes])  
+    
     #* Close new netcdf file
     ds_new_cmaq.close()
 
-    print(f"{day} Forcing file DONE")
+    print(f"{day_monthly} Forcing file DONE")
+
+def fill_attrs(ds_conc, nc_var):
+    """Fill atribute values for variables as appear in conc file.
+
+    Keyword arguments:
+    ds_conc -- conc file dataset
+    nc_var -- netCDF variable of the file
+    var_name -- variable name
+    """
+    varattrs=["long_name","units","var_desc"]
+    for varattr in varattrs:
+        if hasattr(ds_conc.variables[nc_var.name], varattr): 
+            varattrVal = getattr(ds_conc.variables[nc_var.name], varattr)
+            setattr(nc_var, varattr, varattrVal)
+
+def get_concfiels(conc_file_dir):
+    """Get all files that begins whith 'CONC' from the given directory.
+
+    Keyword arguments:
+    conc_file_dir -- string of the directory whre conc day files
+    """
+    all_files = [f for f in glob.glob(f'{conc_file_dir}/CONC.*')]
+    all_files.sort()
+    return all_files
 
 # %%
 if __name__ == "__main__":
     #CHANGE: save_dir: directory path where the forced files will be saved
     #        latlon_file: path of the latlon netCDF of the run grid
+    #        conc_file_dir: path where CONC files are located
     #        spc_name: cbo5_aero5_aq name of the one species to be forced
-    #        units: the units of the one species to be forced
-    #        day_0: first day of forcing files (one file per day will be created)
-    #        day_end: last day of forcing files
     #        dic_coord: dictionary containing a list of latlon coords of lower left 
     #                   and upper right corners for each key-value location.
     #                   Format fo dic_coord must be:
@@ -211,29 +201,23 @@ if __name__ == "__main__":
     #                               'name_of_location_1': [lower_left_lat_1, lower_left_lon_1, upper_left_lat_1, upper_left_lon_1]
     #                               'name_of_location_2': [lower_left_lat_2, lower_left_lon_2, upper_left_lat_2, upper_left_lon_2]
     #                                 }
-    save_dir = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/data/Feb_2018/forcing_files'
-    latlon_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Test_Feb2018/latlon.conc'
-    conc_file = '/hpcfs/home/ca.moreno12/CMAQ_v5.3.1/cmaq_adj/output/Test_Feb2018/CONC.20180201'
+    save_dir = '/Volumes/Avispa/ADJ_FORCE_files'
+    latlon_file = '/Volumes/Avispa/latlon.conc'
+    conc_file_dir = '//Volumes/Avispa/Conc_files'
     spc_name = 'ASO4I'
-    units = 'micrograms/m**3 '
-
-    day_0 = 2018032
-    day_end = 2018036
-
     dic_coords = {
                   'Bogota' : [4.461864, -74.223421 , 4.833805, -74.007853]
-                }
+                 }
     
     ds_latlon = Dataset(latlon_file, mode = 'r',  open = True)
-    ds_conc = Dataset(conc_file, mode = 'r',  open = True)
-    vgtop = ds_conc.VGTOP
-    vglev = ds_conc.VGLVLS
-    ds_conc.close()
-
-    for day in range(day_0, day_end + 1):
+    all_files = get_concfiels(conc_file_dir)  
+    for file in all_files:
+        ds_conc = Dataset(file, mode = 'r',  open = True)
         forced_arr = create_forced_var(ds_latlon, dic_coords)
-        create_ncfile(save_dir, day, ds_latlon, spc_name, units, forced_arr, vgtop, vglev)
+        create_ncfile(save_dir, ds_latlon, spc_name, forced_arr, ds_conc)
+        ds_conc.close()
 
     ds_latlon.close()
+    
 # %%
 
